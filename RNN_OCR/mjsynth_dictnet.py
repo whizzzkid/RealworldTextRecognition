@@ -13,6 +13,8 @@ from skimage.transform import resize
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
+
+
 def unique(seq):
     seen = set()
     seen_add = seen.add
@@ -45,7 +47,7 @@ class MJSYNTH_DICTNET():
         self.classes = []
         self.class_mapping = []
 
-        self.datapath = '../../../data/mnt/ramdisk/max/90kDICT32px/'
+        self.datapath = '../data/mnt/ramdisk/max/90kDICT32px/'
         self.loadData()
 
     def findClasses(self):
@@ -111,7 +113,7 @@ class MJSYNTH_DICTNET():
         
     def loadImage(self, filename):
         if not isfile(filename):
-            print filename + "does not exist"
+            print (filename + "does not exist")
         else:
             img = mpimg.imread(filename)
             if len(img.shape) == 3 and img.shape[2] == 3:
@@ -132,15 +134,15 @@ class MJSYNTH_DICTNET():
         return tmp
 
 if __name__ == '__main__':
-    lexicon = np.genfromtxt('../../../data/mnt/ramdisk/max/90kDICT32px/lexicon.txt', dtype='str' )
-    print "Lexicon size: {}".format(lexicon.shape)
-    
+    lexicon = np.genfromtxt('../data/mnt/ramdisk/max/90kDICT32px/lexicon.txt', dtype='str' )
+    print ("Lexicon size: {}".format(lexicon.shape))
+    print ("Largest string in lexicon: {}".format(len(max(lexicon, key=len))))
 
     z = MJSYNTH_DICTNET("train",2,10,[])
     for i,y in enumerate(z.labels):
-        print i,y,z.classes[y[0]]
-    print z.class_mapping
-  
+        print (i,y,z.classes[y[0]])
+    print (z.class_mapping)
+    print (z.x.shape)
 
     gs = gridspec.GridSpec(min(5,int(z.x.shape[0]/4)),4, top=1., bottom=0., right=1., left=0., hspace=0.1, wspace=0.1)
     for i,g in enumerate(gs): 
@@ -153,7 +155,7 @@ if __name__ == '__main__':
 
     z = MJSYNTH_DICTNET("train",3,10,z.class_mapping)
     for i,y in enumerate(z.labels):
-        print i,y,z.classes[y[0]]
-    print z.class_mapping
+        print (i,y,z.classes[y[0]])
+    print (z.class_mapping)
 
     

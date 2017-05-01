@@ -46,6 +46,7 @@ class DictNet():
         xtest = zeros((1,1,32,100))
         xtest[0,0,:,:] = img
         z = self.model.predict_classes(xtest,verbose=0)[0]
+        print("index is: ", z)
         return self.output_word[z][0]
 
 
@@ -53,8 +54,8 @@ if __name__ == '__main__':
     import matplotlib.image as mpimg
     dir_prefix = '../IMAGES/'
     #filename = dir_prefix + 'Chevron.jpg'
-    filename = dir_prefix + 'CondoleezzaRice.jpg'
-    #filename = dir_prefix + 'CMA_CGM.jpg'
+    #filename = dir_prefix + 'CondoleezzaRice.jpg'
+    filename = dir_prefix + 'CMA_CGM.jpg'
     cnn_model = DictNet()
 
     img = mpimg.imread(filename)        

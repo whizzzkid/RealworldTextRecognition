@@ -1,0 +1,4 @@
+Accuarcy on COCO-Text cropped using simple convnet
+    Accuracy 0.386189
+Accuracy of ICDAR 2013
+    Accuracy 0.708726
