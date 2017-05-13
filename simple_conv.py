@@ -108,7 +108,7 @@ network_layers = [
     Flatten(),
     Dense(4096, activation='relu'),   
     Dense(4096, activation='relu'),  
-    Dense(len(vocab), activation ='softmax')
+    Dense(88172, activation ='softmax')
 ]
 
 # network_layers = [

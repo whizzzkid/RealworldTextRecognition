@@ -9,9 +9,11 @@ import os.path
 import sys
 
 import matplotlib.image as mpimg
+from scipy import misc
 from skimage.transform import resize
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+
 
 
 
@@ -115,7 +117,7 @@ class MJSYNTH_DICTNET():
         if not isfile(filename):
             print (filename + "does not exist")
         else:
-            img = mpimg.imread(filename)
+            img = misc.imread(filename)#mpimg.imread(filename)
             if len(img.shape) == 3 and img.shape[2] == 3:
                 img = np.dot(img[...,:3], [0.2989, 0.5870, 0.1140]) # Convert to greyscale
             im = resize(img, (32,100), order=1, preserve_range=True)
@@ -153,7 +155,7 @@ if __name__ == '__main__':
         ax.set_title("Class: " + lexicon[int(z.classes[z.labels[i][0]])])
     plt.show()
 
-    z = MJSYNTH_DICTNET("train",3,10,z.class_mapping)
+    z = MJSYNTH_DICTNET("valid",10,5,z.class_mapping)
     for i,y in enumerate(z.labels):
         print (i,y,z.classes[y[0]])
     print (z.class_mapping)

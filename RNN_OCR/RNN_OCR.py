@@ -50,7 +50,8 @@ from keras.utils.data_utils import get_file
 from keras.preprocessing import image
 import keras.callbacks
 
-from mjsynth_dictnet import MJSYNTH_DICTNET
+from text_generator import TextGenerator
+from vizualize_callback import VizCallback
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
@@ -61,33 +62,14 @@ def ctc_lambda_func(args):
     y_pred, labels, input_length, label_length = args
     # the 2 is critical here since the first couple outputs of the RNN
     # tend to be garbage:
+    print("ctc loss: ", input_length)
     y_pred = y_pred[:, 2:, :]
     return K.ctc_batch_cost(labels, y_pred, input_length, label_length)
-
-
-# For a real OCR application, this should be beam search with a dictionary
-# and language model.  For this example, best path is sufficient.
-
-def decode_batch(test_func, word_batch):
-    out = test_func([word_batch])[0]
-    ret = []
-    for j in range(out.shape[0]):
-        out_best = list(np.argmax(out[j, 2:], 1))
-        out_best = [k for k, g in itertools.groupby(out_best)]
-        # 26 is space, 27 is CTC blank char
-        outstr = ''
-        for c in out_best:
-            if c >= 0 and c < 26:
-                outstr += chr(c + ord('a'))
-            elif c == 26:
-                outstr += ' '
-        ret.append(outstr)
-    return ret
 
 def train(run_name, start_epoch, stop_epoch, img_w):
     # Input Parameters
     img_h = 32
-    words_per_epoch = 16000
+    words_per_epoch = 2
     val_split = 0.2
     val_words = int(words_per_epoch * (val_split))
 
@@ -99,10 +81,19 @@ def train(run_name, start_epoch, stop_epoch, img_w):
     rnn_size = 512
 
     if K.image_data_format() == 'channels_first':
-        input_shape = (1, img_h, img_w)
+        input_shape = (1, img_w, img_h)
     else:
-        input_shape = (img_h, img_w, 1)   
+        input_shape = (img_w, img_h, 1)   
 
+    lexicon = np.genfromtxt('../data/mnt/ramdisk/max/90kDICT32px/lexicon.txt', dtype='str' )
+    img_gen = TextGenerator(minibatch_size=32,
+                                img_w=100,
+                                img_h=32,
+                                downsample_factor=4, 
+                                valid_class = 320,
+                                valid_examples = 1,    
+                                lexicon = lexicon                            
+                            )
    
     act = 'relu'
     input_data = Input(name='the_input', shape=input_shape, dtype='float32')
@@ -130,74 +121,63 @@ def train(run_name, start_epoch, stop_epoch, img_w):
     gru_2b = GRU(rnn_size, return_sequences=True, go_backwards=True, kernel_initializer='he_normal', name='gru2_b')(gru1_merged)
 
     # transforms RNN output to character activations:
-    inner = Dense(26, kernel_initializer='he_normal',
+    inner = Dense(img_gen.get_output_size(), kernel_initializer='he_normal',
                   name='dense2')(concatenate([gru_2, gru_2b]))
     y_pred = Activation('softmax', name='softmax')(inner)
     Model(inputs=input_data, outputs=y_pred).summary()
 
-    # labels = Input(name='the_labels', shape=[16], dtype='float32')
-    # input_length = Input(name='input_length', shape=[1], dtype='int64')
-    # label_length = Input(name='label_length', shape=[1], dtype='int64')
-    # # Keras doesn't currently support loss funcs with extra parameters
-    # # so CTC loss is implemented in a lambda layer
-    # loss_out = Lambda(ctc_lambda_func, output_shape=(1,), name='ctc')([y_pred, labels, input_length, label_length])
+    labels = Input(name='the_labels', shape=[23], dtype='float32')
+    input_length = Input(name='input_length', shape=[1], dtype='int64')
+    label_length = Input(name='label_length', shape=[1], dtype='int64')
+    # Keras doesn't currently support loss funcs with extra parameters
+    # so CTC loss is implemented in a lambda layer
+    loss_out = Lambda(ctc_lambda_func, output_shape=(1,), name='ctc')([y_pred, labels, input_length, label_length])
 
-    # # clipnorm seems to speeds up convergence
-    # sgd = SGD(lr=0.02, decay=1e-6, momentum=0.9, nesterov=True, clipnorm=5)
+    # clipnorm seems to speeds up convergence
+    sgd = SGD(lr=0.02, decay=1e-6, momentum=0.9, nesterov=True, clipnorm=5)
 
-    # model = Model(inputs=[input_data, labels, input_length, label_length], outputs=loss_out)
+    model = Model(inputs=[input_data, labels, input_length, label_length], outputs=loss_out)
 
-    # # the loss calc occurs elsewhere, so use a dummy lambda func for the loss
-    # model.compile(loss={'ctc': lambda y_true, y_pred: y_pred}, optimizer=sgd)
+    # the loss calc occurs elsewhere, so use a dummy lambda func for the loss
+    model.compile(loss={'ctc': lambda y_true, y_pred: y_pred}, optimizer=sgd)
     # if start_epoch > 0:
     #     weight_file = os.path.join(OUTPUT_DIR, os.path.join(run_name, 'weights%02d.h5' % (start_epoch - 1)))
     #     model.load_weights(weight_file)
-    # # captures output of softmax so we can decode the output during visualization
-    # test_func = K.function([input_data], [y_pred])
+    # captures output of softmax so we can decode the output during visualization
+    test_func = K.function([input_data], [y_pred])
 
-    # viz_cb = VizCallback(run_name, test_func, img_gen.next_val())
+    viz_cb = VizCallback(test_func, img_gen.next_val())
 
-    # model.fit_generator(generator=img_gen.next_train(), steps_per_epoch=(words_per_epoch - val_words),
-    #                     epochs=stop_epoch, validation_data=img_gen.next_val(), validation_steps=val_words,
-    #                     callbacks=[viz_cb, img_gen], initial_epoch=start_epoch)
+    model.fit_generator(generator=img_gen.next_train(), steps_per_epoch=words_per_epoch,
+                        epochs=stop_epoch, validation_data=img_gen.next_val(), validation_steps=320,
+                        callbacks=[viz_cb, img_gen], initial_epoch=start_epoch)
 
 
-def text_to_labels(text, num_classes):
-    ret = []
-    for char in text:
-        print (char)
-        if char >= 'a' and char <= 'z':
-            ret.append(ord(char) - ord('a'))
-        elif char == ' ':
-            ret.append(26)
-        else:
-            print(char, " not found")
 
-    return ret
 
 
 if __name__ == '__main__':
     run_name = datetime.datetime.now().strftime('%Y:%m:%d:%H:%M:%S')
-    #train(run_name, 0, 20, 100)
+    train(run_name, 0, 20, 100)
     # increase to wider images and start at epoch 20. The learned weights are reloaded
     #train(run_name, 20, 25, 512)
     
-    lexicon = np.genfromtxt('../data/mnt/ramdisk/max/90kDICT32px/lexicon.txt', dtype='str' )
-    print ("Lexicon size: {}".format(lexicon.shape))
-    print ("Largest string in lexicon: {}".format(len(max(lexicon, key=len))))
+    # lexicon = np.genfromtxt('../data/mnt/ramdisk/max/90kDICT32px/lexicon.txt', dtype='str' )
+    # print ("Lexicon size: {}".format(lexicon.shape))
+    # print ("Largest string in lexicon: {}".format(len(max(lexicon, key=len))))
 
-    z = MJSYNTH_DICTNET("train",2,10,[])
-    for i,y in enumerate(z.labels):
-        print (i,y,z.classes[y[0]])
-    print (z.class_mapping)
-    print (z.x.shape)
+    # z = MJSYNTH_DICTNET("train",2,10,[])
+    # for i,y in enumerate(z.labels):
+    #     print (i,y,z.classes[y[0]])
+    # print (z.class_mapping)
+    # print (z.x.shape)
 
-    gs = gridspec.GridSpec(min(5,int(z.x.shape[0]/4)),4, top=1., bottom=0., right=1., left=0., hspace=0.1, wspace=0.1)
-    for i,g in enumerate(gs): 
-        ax = plt.subplot(g)
-        ax.imshow(z.x[i,:,:,0], cmap='gray')
-        ax.set_xticks([])
-        ax.set_yticks([])        
-        ax.set_title("Class: " + lexicon[int(z.classes[z.labels[i][0]])])
-    plt.show()
+    # gs = gridspec.GridSpec(min(5,int(z.x.shape[0]/4)),4, top=1., bottom=0., right=1., left=0., hspace=0.1, wspace=0.1)
+    # for i,g in enumerate(gs): 
+    #     ax = plt.subplot(g)
+    #     ax.imshow(z.x[i,:,:,0], cmap='gray')
+    #     ax.set_xticks([])
+    #     ax.set_yticks([])        
+    #     ax.set_title("Class: " + lexicon[int(z.classes[z.labels[i][0]])])
+    # plt.show()
     
